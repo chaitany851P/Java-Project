@@ -1,0 +1,225 @@
+
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.IOException;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.Scanner;
+
+public class MainGUI extends JFrame {
+    private JTextField movieNameField;
+    private JTextArea resultArea;
+    private JLabel statusLabel;
+    private JProgressBar progressBar; // Progress bar for loading indicator
+
+    public MainGUI() {
+        setTitle("Movie Search");
+        setSize(800, 600);
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setLayout(new BorderLayout());
+        getContentPane().setBackground(new Color(240, 240, 240));
+
+        // Panel for input components
+        JPanel inputPanel = new JPanel(new GridBagLayout());
+        inputPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        inputPanel.setBackground(new Color(255, 255, 255));
+        JLabel movieLabel = new JLabel("Enter the movie name: ");
+        movieNameField = new JTextField(40);
+        JButton searchButton = new JButton("Search");
+        searchButton.setBackground(new Color(100, 100, 100));
+        searchButton.setForeground(Color.WHITE);
+        JButton clearButton = new JButton("Clear");
+        clearButton.setBackground(new Color(100, 100, 100));
+        clearButton.setForeground(Color.WHITE);
+        inputPanel.add(movieLabel);
+        inputPanel.add(movieNameField);
+        inputPanel.add(searchButton);
+        inputPanel.add(clearButton);
+
+        // Panel for displaying results
+        JPanel resultPanel = new JPanel(new BorderLayout());
+        resultPanel.setBorder(BorderFactory.createEmptyBorder(20, 20, 20, 20));
+        resultPanel.setBackground(new Color(255, 255, 255));
+        resultArea = new JTextArea(30, 60);
+        resultArea.setEditable(false);
+        resultArea.setFont(new Font("Consolas", Font.PLAIN, 14));
+        resultArea.setBorder(BorderFactory.createLineBorder(Color.GRAY));
+        JScrollPane scrollPane = new JScrollPane(resultArea);
+        resultPanel.add(scrollPane, BorderLayout.CENTER);
+
+        // Status label
+        statusLabel = new JLabel();
+        statusLabel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
+        statusLabel.setFont(new Font("Arial", Font.PLAIN, 14));
+        resultPanel.add(statusLabel, BorderLayout.SOUTH);
+
+        // Add panels to the frame
+        add(inputPanel, BorderLayout.NORTH);
+        add(resultPanel, BorderLayout.CENTER);
+
+        // Progress bar for loading indicator
+        progressBar = new JProgressBar();
+        progressBar.setIndeterminate(true);
+        progressBar.setVisible(false); // Initially invisible
+
+        // Add progress bar to the input panel
+        inputPanel.add(progressBar);
+
+        // Action listener for the search button
+        searchButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                String movieName = movieNameField.getText().trim();
+                if (!movieName.isEmpty()) {
+                    try {
+                        // Show loading indicator
+                        progressBar.setVisible(true);
+                        String storyInfo = searchMovie(movieName);
+                        displayMovieInfo(storyInfo, movieName);
+                    } catch (IOException ioException) {
+                        // Handle IOException (offline)
+                        displayError("You are offline. Please check your internet connection.");
+                        ioException.printStackTrace();
+                    } finally {
+                        // Hide loading indicator
+                        progressBar.setVisible(false);
+                    }
+                } else {
+                    displayError("Please enter a movie name.");
+                }
+            }
+        });
+
+        // Action listener for the clear button
+        clearButton.addActionListener(new ActionListener() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                // Clear movie name field, result area, and status label
+                movieNameField.setText("");
+                resultArea.setText("");
+                statusLabel.setText("");
+            }
+        });
+    }
+
+    private void displayMovieInfo(String storyInfo, String movieName) {
+        if (storyInfo != null && !storyInfo.contains("\"Response\":\"False\"")) {
+            // Movie or series found
+            resultArea.setText("");
+            String[] keys = {"Title", "Year", "Rated", "Released", "Runtime", "Genre", "Director", "Writer", "Actors",
+                    "Plot", "Language", "Country", "Awards", "Ratings", "Metascore", "imdbRating",
+                    "imdbVotes", "Type", "DVD", "BoxOffice", "Production", "Website"};
+
+            StringBuilder info = new StringBuilder();
+            info.append(movieName).append("\n\n");
+
+            String type = getValueFromJson(storyInfo, "Type");
+            for (String key : keys) {
+                String value = getValueFromJson(storyInfo, key);
+                if (!value.isEmpty()) {
+                    if (key.equals("Type") && value.equals("series")) {
+                        // If it's a series, add number of episodes, seasons, and total runtime
+                        String totalSeasons = getValueFromJson(storyInfo, "totalSeasons");
+                        info.append("Total Seasons: ").append(totalSeasons).append("\n");
+
+                        // Get total runtime for all episodes
+                        String totalRuntime = getTotalRuntimeForSeries(storyInfo);
+                        info.append("Total Runtime: ").append(totalRuntime).append("\n");
+                    } else {
+                        info.append(key).append(": ").append(value).append("\n");
+                    }
+                }
+            }
+
+            resultArea.setText(info.toString());
+            statusLabel.setText("Movie details retrieved successfully.");
+        } else {
+            // Movie or series not found
+            displayError("No such movie or web series with the name '" + movieName + "'");
+        }
+    }
+
+    private String getTotalRuntimeForSeries(String seriesInfo) {
+        int totalRuntime = 0;
+
+        // Parse each season to get the runtime of each episode
+        for (int season = 1; season <= Integer.parseInt(getValueFromJson(seriesInfo, "totalSeasons")); season++) {
+            String seasonInfo = searchSeasonInfo(seriesInfo, season);
+            totalRuntime += getTotalRuntimeForSeason(seasonInfo);
+        }
+
+        return String.valueOf(totalRuntime) + " minutes";
+    }
+
+    private int getTotalRuntimeForSeason(String seasonInfo) {
+        // Parse season episodes and calculate total runtime
+        int totalRuntime = 0;
+        // You need to implement parsing of season info to get the total runtime
+        // Example: Parse each episode's runtime and add it to totalRuntime
+        return totalRuntime;
+    }
+
+    // You'll need to implement the searchSeasonInfo method to retrieve information about each season
+    private String searchSeasonInfo(String seriesInfo, int seasonNumber) {
+        // Implement logic to search for season information using the OMDb API
+        return ""; // Placeholder, replace with actual implementation
+    }
+
+    private void displayError(String errorMessage) {
+        resultArea.setText("");
+        statusLabel.setText(errorMessage);
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                MainGUI gui = new MainGUI();
+                gui.setVisible(true);
+            }
+        });
+    }
+    public static String getImageUrl(String movieName) {
+        // Placeholder for fetching image URL from an image API (e.g., TMDB)
+        return "https://via.placeholder.com/300"; // Placeholder URL
+    }
+
+    public static String getTrailerUrl(String movieName) {
+        // Placeholder for fetching trailer URL from a video API (e.g., YouTube)
+        return "https://www.youtube.com/watch?v=dQw4w9WgXcQ"; // Placeholder URL
+    }
+
+    // Remaining methods (searchMovie, getValueFromJson) remain the same
+    public static String searchMovie(String movieName) throws IOException {
+        String apiKey = "96d72f07"; // Replace with your actual API key
+        String url = "https://www.omdbapi.com/?t=" + movieName + "&apikey=" + apiKey;
+
+        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        connection.setRequestMethod("GET");
+
+        int responseCode = connection.getResponseCode();
+        if (responseCode == HttpURLConnection.HTTP_OK) {
+            try (Scanner scanner = new Scanner(connection.getInputStream()).useDelimiter("\\A")) {
+                return scanner.hasNext() ? scanner.next() : "";
+            }
+        } else {
+            return null;
+        }
+    }
+
+    public static String getValueFromJson(String json, String key) {
+        int start = json.indexOf("\"" + key + "\":\"");
+        if (start == -1) {
+            return "";
+        }
+        start += key.length() + 4;
+        int end = json.indexOf("\"", start);
+        if (end == -1) {
+            return "";
+        }
+
+        return json.substring(start, end);
+    }
+}
